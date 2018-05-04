@@ -24,6 +24,7 @@ FUNCTIONS_QUERY = resource_text("functions.sql")
 EXTENSIONS_QUERY = resource_text("extensions.sql")
 ENUMS_QUERY = resource_text("enums.sql")
 DEPS_QUERY = resource_text("deps.sql")
+TRIGGERS_QUERY = resource_text("triggers.sql")
 
 
 class InspectedSelectable(BaseInspectedSelectable):
@@ -313,6 +314,30 @@ class InspectedConstraint(Inspected, TableRelated):
         equalities = self.name == other.name, self.schema == other.schema, self.table_name == other.table_name, self.definition == other.definition, self.index == other.index
         return all(equalities)
 
+class InspectedTrigger(Inspected):
+    def __init__(self, trigger):
+        self.name = trigger.trigger_name
+        self.schema = trigger.trigger_schema
+        self.event_manipulation = trigger.event_manipulation
+        self.event_object_schema = trigger.event_object_schema
+        self.event_object_table = trigger.event_object_table
+        self.action_statement = trigger.action_statement
+        self.action_orientation = trigger.action_orientation
+        self.action_timing = trigger.action_timing
+
+    def __eq__(self, other):
+        equalities = self.name == other.name, self.schema == other.schema, self.event_manipulation == other.event_manipulation, self.action_statement == other.action_statement, self.action_orientation == other.action_orientation, self.action_timing == other.action_timing
+        return all(equalities)
+
+    @property
+    def create_statement(self):
+        return "create trigger {} {} {} on {} for each {} {};".format(
+            self.quoted_name, self.action_timing, self.event_manipulation, quoted_identifier(self.event_object_table, self.event_object_schema), self.action_orientation, self.action_statement
+        )
+
+    @property
+    def drop_statement(self):
+        return "drop trigger {} on {};".format(self.quoted_name, quoted_identifier(self.event_object_table, self.event_object_schema))
 
 class PostgreSQL(DBInspector):
 
@@ -332,6 +357,7 @@ class PostgreSQL(DBInspector):
         self.ENUMS_QUERY = processed(ENUMS_QUERY)
         self.DEPS_QUERY = processed(DEPS_QUERY)
         self.SCHEMAS_QUERY = processed(SCHEMAS_QUERY)
+        self.TRIGGERS_QUERY = processed(TRIGGERS_QUERY)
         super(PostgreSQL, self).__init__(c, include_internal)
 
     def load_all(self):
@@ -343,6 +369,7 @@ class PostgreSQL(DBInspector):
         self.selectables.update(self.functions)
         self.load_deps()
         self.load_deps_all()
+        self.load_triggers()
 
     def load_schemas(self):
         q = self.c.execute(self.SCHEMAS_QUERY)
@@ -546,6 +573,11 @@ class PostgreSQL(DBInspector):
             )
             identity_arguments = "({})".format(s.identity_arguments)
             self.functions[s.quoted_full_name + identity_arguments] = s
+
+    def load_triggers(self):
+        q = self.c.execute(self.TRIGGERS_QUERY)
+        triggers = [InspectedTrigger(each) for each in q]
+        self.triggers = od((trigger.quoted_full_name, trigger) for trigger in triggers)
 
     def one_schema(self, schema):
         props = "schemas relations tables views functions selectables sequences constraints indexes enums extensions"
