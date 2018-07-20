@@ -337,7 +337,7 @@ class InspectedTrigger(Inspected):
 
     @property
     def drop_statement(self):
-        return "drop trigger {} on {};".format(self.quoted_name, quoted_identifier(self.event_object_table, self.event_object_schema))
+        return "drop trigger if exists {} on {};".format(self.quoted_name, quoted_identifier(self.event_object_table, self.event_object_schema))
 
 class PostgreSQL(DBInspector):
 
